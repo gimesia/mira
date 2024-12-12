@@ -78,19 +78,14 @@ function maskNifti = create_keypoints_mask_nifti(points, templateNifti)
     mask = create_keypoints_mask(points, dims);
 
     % Dilate (optionally)
-    % se = strel("cube", 3);
-    % mask = imdilate(mask, se);
+    se = strel("cube", 3);
+    mask = imdilate(mask, se);
 
     maskNifti = make_nii(mask, spacing, origin);
     maskNifti.hdr.hist.sform_code = templateNifti.hdr.hist.sform_code;  % Use a valid sform
     maskNifti.hdr.hist.srow_x = templateNifti.hdr.hist.srow_x;
     maskNifti.hdr.hist.srow_y = templateNifti.hdr.hist.srow_y;
     maskNifti.hdr.hist.srow_z = templateNifti.hdr.hist.srow_z;
-end
-
-function showMidSlice(niftiImg)
-    midSlice = round(size(niftiImg.img,3)/2);
-    imshow(niftiImg.img(:,:,midSlice));
 end
 
 function hist(V, t)
@@ -105,14 +100,22 @@ end
 
 function nii = preprocess(niftiImg)
     nii = niftiImg;
-    nii.img(nii.img<0) = 0; % clipping
+    nii.img(nii.img < 0) = 0; % clipping
+
     min_val = min(nii.img(:));
     max_val = max(nii.img(:));
     normalizedImg = (nii.img - min_val) / (max_val - min_val);
 
+    % Apply CLAHE
+    flat = reshape(normalizedImg, [1, prod(size(normalizedImg))]);
+    heImg = histeq(flat);
+    reshaped = reshape(heImg, size(normalizedImg));
+
+
     % hist(niftiImg.img,"before");
     % hist(nii.img,"clipping");
-    % hist(normalizedImg,"after");
+    hist(normalizedImg,"normalization");
+    hist(reshaped,"clahe");
 
     % Update the NIfTI structure with the normalized image
     nii.img = normalizedImg;
@@ -120,6 +123,8 @@ function nii = preprocess(niftiImg)
     % Update the header information
     nii.hdr.dime.cal_min = 0;
     nii.hdr.dime.cal_max = 1;
+    nii.hdr.dime.glmin = 0;
+    nii.hdr.dime.glmax = 1;
 end
 
 function formatPointsFile(inputFile, outputFile)
@@ -150,22 +155,7 @@ function formatPointsFile(inputFile, outputFile)
     % Close the file
     fclose(fid);
 
-    fprintf('Formatted file saved as: %s\n', outputFile);
-end
-
-function matrix = extractCoordinates(filename)
-    % Read the data from the file
-    matrix = readmatrix(filename, 'Delimiter', '\t');
-
-    % Ensure the matrix has 3 columns
-    if size(matrix, 2) ~= 3
-        error('The file does not contain exactly 3 columns as expected.');
-    end
-
-    % Check if there are exactly 300 rows
-    if size(matrix, 1) ~= 300
-        warning('The number of rows in the file (%d) is not 300.', size(matrix, 1));
-    end
+    % fprintf('Formatted file saved as: %s\n', outputFile);
 end
 
 function outputMatrix = extractOutputPoints(filename)
@@ -212,10 +202,6 @@ rawImgFiles = dir(fullfile(dataPath, "**", "*BHCT.img")); % only raw
 rawImgFiles = {rawImgFiles.name};
 rawImgFiles = strcat(strtok(rawImgFiles, '_'), '\', rawImgFiles);
 
-% imgFiles = dir(fullfile(dataPath, "**", "*.nii.gz")); % only nifti
-% imgFiles = {imgFiles.name};  % Get all filenames in a cell array
-% imgFiles = strcat(strtok(imgFiles, '_'), '\', imgFiles);
-
 pointFiles = dir(fullfile(dataPath, "**", "*xyz_r1.txt")); % only points txt
 pointFiles= {pointFiles.name};  % Get all filenames in a cell array
 pointFiles = strcat(strtok(pointFiles, '_'), '\', pointFiles);
@@ -227,7 +213,7 @@ parameter = "Par0016"
 parameterFileBSpline = ...
     "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\"+...
     "elastix_model_zoo\models\Par0016\Par0016.multibsplines.lung.sliding.txt";
-register = true
+register = 0
 
 % Paths to elastix and transformix executables
 elastixPath = elastixBasePath + "elastix-5.0.0-win64\elastix.exe";
@@ -235,8 +221,9 @@ transformixPath = elastixBasePath + "elastix-5.0.0-win64\transformix.exe";
 
 % To track timing for each case
 timingData = struct();
+TREdata = struct();
 
-for caseID = 1:1%length(cases)
+for caseID = 1:length(cases)
     caseName = string(cases{caseID});
     disp("Processing Case [" + caseName + "]");
     idxs = cellfun(@(x) contains(x, caseName), rawImgFiles);
@@ -286,9 +273,9 @@ for caseID = 1:1%length(cases)
 
     % Create lung masks using the NIfTI template
     inhaleLungMaskNifti = inhaleImgPreprocNifti;
-    inhaleLungMaskNifti.img = binarize_lung_3d(inhaleLungMaskNifti.img, 0.3);
+    inhaleLungMaskNifti.img = binarize_lung_3d(inhaleLungMaskNifti.img, 0.2);
     exhaleLungMaskNifti = exhaleImgPreprocNifti;
-    exhaleLungMaskNifti.img = binarize_lung_3d(exhaleLungMaskNifti.img, 0.3);
+    exhaleLungMaskNifti.img = binarize_lung_3d(exhaleLungMaskNifti.img, 0.2);
 
     % Create point masks using the NIfTI template
     inhalePointsMaskNifti = create_keypoints_mask_nifti(inhalePoints, inhaleImgNifti);
@@ -336,39 +323,45 @@ for caseID = 1:1%length(cases)
         mkdir(caseOutputDirectory);
     end
 
-    % Measure time for registration
-    disp("Starting registration with elastix ([exhale] -> [inhale]): " + caseName);
-    tic;  % Start timing
-    elastixCommand = sprintf('"%s" -m "%s" -f "%s" -fMask "%s" -p "%s" -out "%s"', ...
-                      elastixPath, exhaleImgPreprocNiftiPath, inhaleImgPreprocNiftiPath, ...
-                      inhaleLungMaskNiftiPath, parameterFileBSpline, ...
-                      caseOutputDirectory);
     if register
+
+        % Measure time for registration
+        disp("Starting registration with elastix ([exhale] -> [inhale]): " + caseName);
+        tic;  % Start timing
+        elastixCommand = sprintf('"%s" -m "%s" -mMask "%s" -f "%s" -fMask "%s" -p "%s" -out "%s"', ...
+                          elastixPath, ...
+                          exhaleImgPreprocNiftiPath, exhaleLungMaskNiftiPath, ...
+                          inhaleImgPreprocNiftiPath, inhaleLungMaskNiftiPath, ...
+                          parameterFileBSpline, caseOutputDirectory);
+
         [status, result] = system(elastixCommand);
+    else
+        status = 0;
     end
 
     registrationTime = toc;  % End timing
 
-    % Rename the result image
-    resultImagePath = fullfile(caseOutputDirectory, "result." + parameter + ".nii");
-    if register
-        movefile(fullfile(caseOutputDirectory, "result.0.nii"), resultImagePath);
-    end
-
-    % Rename the TransformParameters.0.txt file
-    originalTransformParametersPath = fullfile( ...
-        caseOutputDirectory, "TransformParameters.0.txt");
-    newTransformParametersPath = fullfile( ...
-        caseOutputDirectory, "TransformParameters." + parameter + ".txt");
-    if register
-        movefile(originalTransformParametersPath, newTransformParametersPath);
-    end
-
     if status == 0
+        % Rename the result image
+        resultImagePath = fullfile(caseOutputDirectory, "result." + parameter + ".nii");
+        if register
+            movefile(fullfile(caseOutputDirectory, "result.0.nii"), resultImagePath);
+        end
+
+        % Rename the TransformParameters.0.txt file
+        originalTransformParametersPath = fullfile( ...
+            caseOutputDirectory, "TransformParameters.0.txt");
+        newTransformParametersPath = fullfile( ...
+            caseOutputDirectory, "TransformParameters." + parameter + ".txt");
+        if register
+            movefile(originalTransformParametersPath, newTransformParametersPath);
+        end
+
+
         disp("Registration with elastix completed in " + registrationTime + " seconds.");
 
-        inPtsPath2 = fullfile(caseOutputDirectory, "inPts.txt");
-        exPtsPath2 = fullfile(caseOutputDirectory, "exPts.txt");
+        inPtsPath2 = fullfile(caseOutputDirectory, "inhalePts.txt");
+        exPtsPath2 = fullfile(caseOutputDirectory, "exhalePts.txt");
 
         % transformParamsPath2 = fullfile(caseOutputDirectory, "TransformParameters2.test.txt");
         % updateTransformixParameterFile(newTransformParametersPath, transformParamsPath2)
@@ -404,14 +397,17 @@ for caseID = 1:1%length(cases)
             end
 
             % Calculate the Euclidean distances
-            distances = sqrt(sum((fixedCoordinates - transformedCoordinates).^2, 2));
+            distances = fixedCoordinates - transformedCoordinates;
+            distancesVoxel = sqrt(sum(distances.^2, 2));
+            distancesMilimeter = sqrt(sum((distances.*imageSpacing).^2, 2));
 
             % Save the distances into a text file
             distanceFilePath = char( ...
                 fullfile(caseOutputDirectory, 'euclidean_distances.txt'));
-            writematrix(distances, distanceFilePath);
+            writematrix(distancesVoxel, distanceFilePath);
 
-            distances
+            disp("Average distance: " + mean(distancesVoxel) + " voxels;")
+            disp("Average distance: " + mean(distancesMilimeter) + " mm;")
         else
             disp("There has been an error, see transformix log!");
         end
@@ -424,10 +420,41 @@ for caseID = 1:1%length(cases)
     timingData.(caseName).saveTime = saveTime;
     timingData.(caseName).registrationTime = registrationTime;
     timingData.(caseName).transformationTime = transformationTime;
+    TREdata.(caseName).voxel = mean(distancesVoxel);
+    TREdata.(caseName).mm = mean(distancesMilimeter);
 end
+
+
+% Initialize tables to store the unpacked data
+timingTable = table();
+TRETable = table();
+
+% Unpack timingData
+caseNames = fieldnames(timingData);
+for i = 1:numel(caseNames)
+    caseName = caseNames{i};
+    caseTimingData = timingData.(caseName);
+    caseTimingData.caseName = caseName; % Add case name as a field
+    timingTable = [timingTable; struct2table(caseTimingData)];
+end
+
+% Unpack TREdata
+caseNames = fieldnames(TREdata);
+for i = 1:numel(caseNames)
+    caseName = caseNames{i};
+    caseTREData = TREdata.(caseName);
+    caseTREData.caseName = caseName; % Add case name as a field
+    TRETable = [TRETable; struct2table(caseTREData)];
+end
+
+% Save the tables to CSV files
+timingCSVPath = fullfile(dataPath, 'timing_dataPar0016.csv');
+TRECSVPath = fullfile(dataPath, 'TRE_dataPar0016.csv');
+writetable(timingTable, timingCSVPath);
+writetable(TRETable, TRECSVPath);
 
 % Display summary of times for all cases
 disp("Timing data for all cases:");
-
-
-disp(timingData);
+disp(timingTable);
+disp("TRE data for all cases:");
+disp(TRETable);
