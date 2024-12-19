@@ -88,43 +88,108 @@ function maskNifti = create_keypoints_mask_nifti(points, templateNifti)
     maskNifti.hdr.hist.srow_z = templateNifti.hdr.hist.srow_z;
 end
 
-function hist(V, t)
-    figure
-    histogram(V)
-    xlim([min(V,[],"all") max(V,[],"all")])
-    ylim([0 2e6])
-    xlabel("Intensity")
-    ylabel("Number of Voxels")
-    title(t)
-end
-
 function nii = preprocess(niftiImg)
-    nii = niftiImg;
-    nii.img(nii.img < 0) = 0; % clipping
+    img = int32(niftiImg.img);
 
-    min_val = min(nii.img(:));
-    max_val = max(nii.img(:));
-    normalizedImg = (nii.img - min_val) / (max_val - min_val);
+    % img_filtered = imgaussfilt3(img, 0.5);
+    img_filtered = medfilt3(img, [5 5 5]);
 
-    % Apply CLAHE
-    flat = reshape(normalizedImg, [1, prod(size(normalizedImg))]);
-    heImg = histeq(flat);
-    reshaped = reshape(heImg, size(normalizedImg));
+    mx = 2000; % max(img(:));
+    clipped = rescale(img_filtered, 0, mx, 'InputMin', 0, 'InputMax', mx);
 
+    normalizedImg = rescale(single(clipped), 0, 1, 'InputMin', 0, ...
+        'InputMax', 1400);
 
-    % hist(niftiImg.img,"before");
-    % hist(nii.img,"clipping");
-    hist(normalizedImg,"normalization");
-    hist(reshaped,"clahe");
+    % Plot histograms for visualization before and after normalization
+    % figure;
+    % subplot(1, 3, 1);
+    % histogram(clipped, 50);
+    % title('Before Normalization');
+    %
+    % subplot(1, 3, 2);
+    % histogram(normalizedImg(:), 50);
+    % title('After Normalization');
+    %
+    % subplot(1, 3, 3);
+    % histogram(histeq(normalizedImg(:)), 50);
+    % title('After equalization');
+
 
     % Update the NIfTI structure with the normalized image
-    nii.img = normalizedImg;
+    nii = niftiImg;
+    nii.img = (normalizedImg);
 
-    % Update the header information
-    nii.hdr.dime.cal_min = 0;
-    nii.hdr.dime.cal_max = 1;
-    nii.hdr.dime.glmin = 0;
-    nii.hdr.dime.glmax = 1;
+    % Automatically update the header fields related to intensity
+    nii.hdr.dime.cal_min = min(normalizedImg(:));
+    nii.hdr.dime.cal_max = max(normalizedImg(:));
+end
+
+function mask = segmentLungs3(img_3d)
+    mask = zeros(size(img_3d));
+
+    for i=1:size(mask, 3)
+        blurred_img = imgaussfilt(img_3d(:,:,i), 3);
+
+        % Threshold the image
+        binary_img = imbinarize(blurred_img, 0.5);
+        binary_img = imcomplement(binary_img);
+
+        if ~any(binary_img(:))
+            % Skip this iteration
+            continue;
+        end
+
+        % Remove objects touching the image border
+        binary_img = imclearborder(binary_img);
+
+        % Perform binary closing
+        closed_img = imclose(binary_img, strel('disk', 5));
+
+        closed_img = imfill(closed_img, 'holes');
+
+        mask(:,:,i) = closed_img;
+    end
+
+    for i=1:size(mask,1)
+        slice = mask(i,:,:);
+
+        if ~any(slice(:))
+            % Skip this iteration
+            continue;
+        end
+
+        reshaped = reshape(slice, [size(slice,2),size(slice,3)]);
+
+        closed_img = imclose(reshaped, strel('disk', 5));
+
+        filled = imfill(closed_img, 'holes');
+
+        % imshow(filled)
+
+        filled = reshape(filled,size(slice));
+        mask(i,:,:) = filled;
+    end
+
+    for i=1:size(mask,2)
+        slice = mask(:,i,:);
+
+        if ~any(slice(:))
+            % Skip this iteration
+            continue;
+        end
+
+        reshaped = reshape(slice, [size(slice,1),size(slice,3)]);
+
+        closed_img = imclose(reshaped, strel('disk', 5));
+
+        filled = imfill(closed_img, 'holes');
+
+        % imshow(filled)
+
+        filled = reshape(filled,size(slice));
+        mask(:,i,:) = filled;
+    end
+
 end
 
 function formatPointsFile(inputFile, outputFile)
@@ -213,7 +278,7 @@ parameter = "Par0016"
 parameterFileBSpline = ...
     "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\"+...
     "elastix_model_zoo\models\Par0016\Par0016.multibsplines.lung.sliding.txt";
-register = 0
+REGISTER = 1
 
 % Paths to elastix and transformix executables
 elastixPath = elastixBasePath + "elastix-5.0.0-win64\elastix.exe";
@@ -273,9 +338,9 @@ for caseID = 1:length(cases)
 
     % Create lung masks using the NIfTI template
     inhaleLungMaskNifti = inhaleImgPreprocNifti;
-    inhaleLungMaskNifti.img = binarize_lung_3d(inhaleLungMaskNifti.img, 0.2);
+    inhaleLungMaskNifti.img = segmentLungs3(inhaleLungMaskNifti.img);
     exhaleLungMaskNifti = exhaleImgPreprocNifti;
-    exhaleLungMaskNifti.img = binarize_lung_3d(exhaleLungMaskNifti.img, 0.2);
+    exhaleLungMaskNifti.img = segmentLungs3(exhaleLungMaskNifti.img);
 
     % Create point masks using the NIfTI template
     inhalePointsMaskNifti = create_keypoints_mask_nifti(inhalePoints, inhaleImgNifti);
@@ -323,15 +388,15 @@ for caseID = 1:length(cases)
         mkdir(caseOutputDirectory);
     end
 
-    if register
+    if REGISTER
 
         % Measure time for registration
         disp("Starting registration with elastix ([exhale] -> [inhale]): " + caseName);
         tic;  % Start timing
         elastixCommand = sprintf('"%s" -m "%s" -mMask "%s" -f "%s" -fMask "%s" -p "%s" -out "%s"', ...
                           elastixPath, ...
-                          exhaleImgPreprocNiftiPath, exhaleLungMaskNiftiPath, ...
-                          inhaleImgPreprocNiftiPath, inhaleLungMaskNiftiPath, ...
+                          exhaleImgNiftiPath, exhaleLungMaskNiftiPath, ...
+                          inhaleImgNiftiPath, inhaleLungMaskNiftiPath, ...
                           parameterFileBSpline, caseOutputDirectory);
 
         [status, result] = system(elastixCommand);
@@ -344,7 +409,7 @@ for caseID = 1:length(cases)
     if status == 0
         % Rename the result image
         resultImagePath = fullfile(caseOutputDirectory, "result." + parameter + ".nii");
-        if register
+        if REGISTER
             movefile(fullfile(caseOutputDirectory, "result.0.nii"), resultImagePath);
         end
 
@@ -353,7 +418,7 @@ for caseID = 1:length(cases)
             caseOutputDirectory, "TransformParameters.0.txt");
         newTransformParametersPath = fullfile( ...
             caseOutputDirectory, "TransformParameters." + parameter + ".txt");
-        if register
+        if REGISTER
             movefile(originalTransformParametersPath, newTransformParametersPath);
         end
 
@@ -422,6 +487,7 @@ for caseID = 1:length(cases)
     timingData.(caseName).transformationTime = transformationTime;
     TREdata.(caseName).voxel = mean(distancesVoxel);
     TREdata.(caseName).mm = mean(distancesMilimeter);
+    disp("---------------------------------------------------------------")
 end
 
 
