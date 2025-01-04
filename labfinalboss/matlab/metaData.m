@@ -1,3 +1,18 @@
+% Paths
+elastixBasePath = "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\";
+basePath = "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\labfinalboss\";
+dataPath = "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\labfinalboss\data\";
+
+rawImgFiles = dir(fullfile(dataPath, "**", "*BHCT.img")); % only raw
+rawImgFiles = {rawImgFiles.name};
+rawImgFiles = strcat(strtok(rawImgFiles, '_'), '\', rawImgFiles);
+
+pointFiles = dir(fullfile(dataPath, "**", "*xyz_r1.txt")); % only points txt
+pointFiles= {pointFiles.name};  % Get all filenames in a cell array
+pointFiles = strcat(strtok(pointFiles, '_'), '\', pointFiles);
+
+cases = unique(strtok(pointFiles, "\"));
+
 % Define the data
 Label = {'copd1', 'copd2', 'copd3', 'copd4', 'copd5', 'copd6', 'copd7', 'copd8', 'copd9', 'copd10'};
 ImageDims = {[512, 512, 121], [512, 512, 102], [512, 512, 126], [512, 512, 126], [512, 512, 131], ...
