@@ -1,6 +1,4 @@
 FileName,voxel,mm,NCC,NGC,caseName
-Par0003.bs-R1-fg.txt,,,,,
-Par0003.bs-R1-ug.txt,,,,,
 Par0003.bs-R2-fg.txt,13.57,10.334,0.69602,0.017424,copd1
 Par0003.bs-R2-fg.txt,7.1643,7.7057,0.61738,0.0060403,copd2
 Par0003.bs-R2-fg.txt,1.7123,1.4818,0.80717,0.058503,copd3
@@ -49,5 +47,4 @@ Par0003.bs-R7-ug.txt,1.5318,1.3331,0.72531,0.016261,copd1
 Par0003.bs-R7-ug.txt,2.9461,3.0229,0.72869,0.022968,copd2
 Par0003.bs-R7-ug.txt,1.3413,1.2905,0.71149,0.024744,copd3
 Par0003.bs-R7-ug.txt,1.8713,1.6273,0.62828,0.0096516,copd4
-Par0003.bs-R8-fg.txt,,,,,
-Par0003.bs-R8-ug.txt,,,,,
+
