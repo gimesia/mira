@@ -54,6 +54,18 @@ combined_df = pd.concat(dfs, ignore_index=True)
 combined_df
 
 #%%
+# Filter out rows containing "-ug" in the FileName column
+filtered_df = combined_df[combined_df['FileName'].str.contains('-fg')]
+# Remove these rows from the original DataFrame
+remaining_df = combined_df[~combined_df['FileName'].str.contains('-fg')]
+# Append the filtered DataFrame to the start of the remaining DataFrame
+final_df = pd.concat([filtered_df, remaining_df], ignore_index=True)
+# Display the final DataFrame
+print(final_df)
+
+combined_df = final_df
+
+#%%
 output_file_path = 'labfinalboss/data/combined_result_df.csv'
 combined_df.to_csv(output_file_path, index=False)
 
@@ -62,7 +74,7 @@ combined_df.to_csv(output_file_path, index=False)
 unique_case_names = combined_df['caseName'].unique()
 palette = sns.color_palette("colorblind", len(unique_case_names))
 palette_dict = {case_name: palette[i] for i, case_name in enumerate(unique_case_names)}
-
+palette_dict['mean'] = 'black'
 # Plot each column separately
 columns_to_plot = ['voxel', 'mm', 'NCC']
 for column in columns_to_plot:
@@ -82,7 +94,8 @@ for column in columns_to_plot:
         hue='caseName',
         data=combined_df[combined_df['caseName'] == 'mean'],
         palette={'mean': palette_dict['mean']},
-        legend=False
+        legend=False,
+        linestyle='--'
     )
     plt.title(f'Performance Comparison by File ({column})')
     plt.xlabel('Param Name')
