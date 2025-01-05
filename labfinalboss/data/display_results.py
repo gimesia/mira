@@ -2,6 +2,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sympy import false
+
 
 def unpack_txt_file(file_path):
     # Read the data from the txt file
@@ -99,6 +101,68 @@ for column in columns_to_plot:
     )
     plt.title(f'Performance Comparison by File ({column})')
     plt.xlabel('Param Name')
+    plt.xticks(rotation=90)
+    plt.ylabel(column)
+    plt.legend(title='Case Name', loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+#%%
+# Filter the DataFrame to include only the desired cases
+cases_to_plot = ['copd1', 'copd2', 'copd3', 'copd4']
+filtered_df = combined_df[combined_df['caseName'].isin(cases_to_plot)]
+
+# Define a custom color palette
+unique_case_names = combined_df['caseName'].unique()
+palette = sns.color_palette("deep", len(unique_case_names))
+palette_dict = {case_name: palette[i] for i, case_name in enumerate(unique_case_names)}
+palette_dict['mean'] = 'black'
+
+# Plot each column separately
+columns_to_plot = ['voxel', 'mm', 'NCC']
+for column in columns_to_plot:
+    plt.figure(figsize=(12, 8))
+    boxplot = sns.boxplot(
+        x='FileName',
+        y=column,
+        data=filtered_df,
+        hue='FileName',
+        palette="deep"
+        # palette=palette_dict
+    )
+
+    plt.title(f'Boxplot of {column} by FileName')
+    plt.xlabel('Parameter Name')
+    plt.xticks(rotation=90)
+    plt.ylabel(column)
+    # plt.legend(title='Case Name', loc='upper left')
+    plt.tight_layout()
+    plt.show()
+
+#%%
+for column in columns_to_plot:
+    plt.figure(figsize=(12, 8))
+    sns.scatterplot(
+        x='FileName',
+        y=column,
+        data=filtered_df,
+        palette="deep",
+        hue='caseName',
+        legend='full',
+        s = 100,  # Increase the size of the dots
+    )
+    sns.lineplot(
+        x='FileName',
+        y=column,
+        data=combined_df[combined_df['caseName'] == 'mean'],
+        palette=palette_dict,
+        hue='caseName',
+        legend=False,
+        linestyle='--'
+    )
+
+    plt.title(f'Boxplot of {column} by FileName')
+    plt.xlabel('Parameter Name')
     plt.xticks(rotation=90)
     plt.ylabel(column)
     plt.legend(title='Case Name', loc='upper left')
