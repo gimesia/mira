@@ -1,4 +1,6 @@
 #%%
+import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -26,12 +28,13 @@ def unpack_txt_file(file_path):
     return pd.concat(list_of_dfs, ignore_index=True)
 
 # File paths
+root = r"C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\labfinalboss\data"
 files = [
-    'labfinalboss/data/TRE_dataPar0003_lungseg3_1400clip_all_params.txt',
-    'labfinalboss/data/TRE_dataPar0007.csv',
-    'labfinalboss/data/TRE_dataPar0008.csv',
-    'labfinalboss/data/TRE_dataPar0015.csv',
-    'labfinalboss/data/TRE_dataPar0016.csv'
+    rf'{root}\TRE_dataPar0003_lungseg3_1400clip_all_params.txt',
+    rf'{root}\Param0007.MI.Coarse.Bspline_tuned.csv',
+    rf'{root}\TRE_dataPar0008.csv',
+    rf'{root}\TRE_dataPar0015.csv',
+    rf'{root}\TRE_dataPar0016.csv'
 ]
 
 # Read data from each file into a dataframe
@@ -66,9 +69,10 @@ final_df = pd.concat([filtered_df, remaining_df], ignore_index=True)
 print(final_df)
 
 combined_df = final_df
+combined_df['FileName'] = combined_df['FileName'].apply(lambda x: os.path.splitext(os.path.split(x)[-1])[0])
 
 #%%
-output_file_path = 'labfinalboss/data/combined_result_df.csv'
+output_file_path = rf'{root}\combined_result_df.csv'
 combined_df.to_csv(output_file_path, index=False)
 
 #%%
@@ -80,7 +84,7 @@ palette_dict['mean'] = 'black'
 # Plot each column separately
 columns_to_plot = ['voxel', 'mm', 'NCC']
 for column in columns_to_plot:
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(14, 10))
     sns.scatterplot(
         x='FileName',
         y=column,
@@ -110,6 +114,7 @@ for column in columns_to_plot:
 #%%
 # Filter the DataFrame to include only the desired cases
 cases_to_plot = ['copd1', 'copd2', 'copd3', 'copd4']
+fs = (14, 10)
 filtered_df = combined_df[combined_df['caseName'].isin(cases_to_plot)]
 
 # Define a custom color palette
@@ -121,7 +126,7 @@ palette_dict['mean'] = 'black'
 # Plot each column separately
 columns_to_plot = ['voxel', 'mm', 'NCC']
 for column in columns_to_plot:
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=fs)
     boxplot = sns.boxplot(
         x='FileName',
         y=column,
@@ -131,7 +136,7 @@ for column in columns_to_plot:
         # palette=palette_dict
     )
 
-    plt.title(f'Boxplot of {column} by FileName')
+    plt.title(f'Boxplot of {column} by Parameter Name')
     plt.xlabel('Parameter Name')
     plt.xticks(rotation=90)
     plt.ylabel(column)
@@ -141,7 +146,7 @@ for column in columns_to_plot:
 
 #%%
 for column in columns_to_plot:
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=fs)
     sns.scatterplot(
         x='FileName',
         y=column,
@@ -161,7 +166,7 @@ for column in columns_to_plot:
         linestyle='--'
     )
 
-    plt.title(f'Boxplot of {column} by FileName')
+    plt.title(f'Boxplot of {column} by Parameter')
     plt.xlabel('Parameter Name')
     plt.xticks(rotation=90)
     plt.ylabel(column)
