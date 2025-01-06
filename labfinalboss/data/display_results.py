@@ -32,9 +32,10 @@ root = r"C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\labfinalboss\data"
 files = [
     rf'{root}\TRE_dataPar0003_lungseg3_1400clip_all_params.txt',
     rf'{root}\Param0007.MI.Coarse.Bspline_tuned.csv',
-    rf'{root}\TRE_dataPar0008.csv',
-    rf'{root}\TRE_dataPar0015.csv',
-    rf'{root}\TRE_dataPar0016.csv'
+    rf'{root}\Param0008.csv',
+    rf'{root}\Param0011.csv',
+    rf'{root}\Param0015.csv',
+    rf'{root}\Param0016.csv'
 ]
 
 # Read data from each file into a dataframe
@@ -83,34 +84,6 @@ palette_dict = {case_name: palette[i] for i, case_name in enumerate(unique_case_
 palette_dict['mean'] = 'black'
 # Plot each column separately
 columns_to_plot = ['voxel', 'mm', 'NCC']
-for column in columns_to_plot:
-    plt.figure(figsize=(14, 10))
-    sns.scatterplot(
-        x='FileName',
-        y=column,
-        hue='caseName',
-        data=combined_df,
-        palette=palette_dict,
-        legend='full'
-    )
-    # Add line plot for mean caseName
-    sns.lineplot(
-        x='FileName',
-        y=column,
-        hue='caseName',
-        data=combined_df[combined_df['caseName'] == 'mean'],
-        palette={'mean': palette_dict['mean']},
-        legend=False,
-        linestyle='--'
-    )
-    plt.title(f'Performance Comparison by File ({column})')
-    plt.xlabel('Param Name')
-    plt.xticks(rotation=90)
-    plt.ylabel(column)
-    plt.legend(title='Case Name', loc='upper left')
-    plt.tight_layout()
-    plt.show()
-
 #%%
 # Filter the DataFrame to include only the desired cases
 cases_to_plot = ['copd1', 'copd2', 'copd3', 'copd4']
