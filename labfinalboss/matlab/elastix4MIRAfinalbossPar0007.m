@@ -7,8 +7,8 @@ parameterFileBSpline = ...
     "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\" + ...
     "elastix_model_zoo\models\Par0007\Parameters.MI.Coarse.Bspline_tuned.txt"
 
-REGISTER = 1
-PREPROCESS = 1
+REGISTER = 1;
+PREPROCESS = 1;
 
 % Paths to elastix and transformix executables
 elastixPath = elastixBasePath + "elastix-5.0.0-win64\elastix.exe";
@@ -79,7 +79,7 @@ for caseID = 1:length(cases)
         inhaleLungMaskNifti.img = segmentLungs3(inhaleLungMaskNifti.img);
         exhaleLungMaskNifti = exhaleImgPreprocNifti;
         exhaleLungMaskNifti.img = segmentLungs3(exhaleLungMaskNifti.img);
-
+    
 % ---------------------------------------------------------------------
 % KEYPOINT MASK GENERATION
 % ---------------------------------------------------------------------
@@ -118,7 +118,7 @@ for caseID = 1:length(cases)
         save_nii(inhaleImgPreprocNifti, inhaleImgPreprocNiftiPath);
         save_nii(inhalePointsMaskNifti, inhalePointsMaskNiftiPath);
         save_nii(inhaleLungMaskNifti, inhaleLungMaskNiftiPath);
-
+            
         save_nii(exhaleImgNifti, exhaleImgNiftiPath);
         save_nii(exhaleImgPreprocNifti, exhaleImgPreprocNiftiPath);
         save_nii(exhalePointsMaskNifti, exhalePointsMaskNiftiPath);
@@ -181,7 +181,7 @@ for caseID = 1:length(cases)
 % -----------------------------------------------------------------
 % KEYPOINT TRANSFORM
 % -----------------------------------------------------------------
-
+        
         inPtsPath2 = fullfile(caseOutputDirectory, "inhalePts.txt");
         exPtsPath2 = fullfile(caseOutputDirectory, "exhalePts.txt");
         formatPointsFile(inhalePointsPath, inPtsPath2);
@@ -199,20 +199,20 @@ for caseID = 1:length(cases)
         % Prepare the inhale lung mask transformation
         inhaleLungMaskTransformParamPath = fullfile(caseOutputDirectory, "TransformParameters_mask." + parameter + ".txt");
         copyfile(newTransformParametersPath, inhaleLungMaskTransformParamPath);
-
+        
         % Update the interpolator to NN for mask transformation
         updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'ResampleInterpolator', 'FinalNearestNeighborInterpolator');
         updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'FinalBSplineInterpolationOrder', '0');
         updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'WriteResultImage', 'true');
 
-
+        
         % Transform the inhale lung mask
         disp("Starting transformation of inhale lung mask with transformix: " + caseName);
         transformixLungMaskCommand = sprintf('"%s" -in "%s" -tp "%s" -out "%s"', ...
                           transformixPath, inhaleLungMaskNiftiPath, ...
                           inhaleLungMaskTransformParamPath, caseOutputDirectory);
         [statusLungMask, resultLungMask] = system(transformixLungMaskCommand);
-
+        
         if statusLungMask == 0
             transformedLungMaskPath = char(...
                 fullfile(caseOutputDirectory, "transformed_inhale_lung_mask." + parameter + ".nii"));
@@ -235,7 +235,7 @@ for caseID = 1:length(cases)
         registeredImgNifti = load_nii(char(resultImagePath));
         transformedMaskNifti = load_nii(char(transformedLungMaskPath));
         registeredImgMaskedImg = registeredImgNifti.img .* transformedMaskNifti.img;
-
+        
         % Masked ground truth image
         inhaleImgMaskedImg = inhaleImgNifti.img .* inhaleLungMaskNifti.img;
 
@@ -244,8 +244,12 @@ for caseID = 1:length(cases)
         % ncc = computeNCC(inhaleImgMaskedImg, registeredImgMaskedImg);
         % ngc = computeNGC(inhaleImgMaskedImg, registeredImgMaskedImg);
 
-        ncc = computeNCC(inhaleImgNifti.img, registeredImgNifti.img);
-        ngc = computeNGC(inhaleImgNifti.img, registeredImgNifti.img);
+        ncc = computeNCC( ...
+            inhaleImgNifti.img .* inhaleLungMaskNifti.img, ...
+            registeredImgNifti.img .* inhaleLungMaskNifti.img);
+        ngc = computeNGC( ...
+            inhaleImgNifti.img .* inhaleLungMaskNifti.img, ...
+            registeredImgNifti.img .* inhaleLungMaskNifti.img);
 
         if statusKeypoint == 0
             % Rename the transformation result
@@ -274,6 +278,8 @@ for caseID = 1:length(cases)
 
             disp("Average distance: " + mean(distancesVoxel) + " voxels;")
             disp("Average distance: " + mean(distancesMilimeter) + " mm;")
+            disp("NCC: " + ncc)
+            disp("NGC: " + ngc)
         else
             disp("There has been an error, see transformix log!");
         end
@@ -305,24 +311,26 @@ for caseID = 1:length(cases)
         transformedLungMaskPath, ...
         distanceFilePath, ...
         inPtsPath2, ...
-        exPtsPath2
+        exPtsPath2, ...
     };
 
     % Add logs to retain list
     elastixLogPath = fullfile(caseOutputDirectory, "elastix.log");
     transformixLogPath = fullfile(caseOutputDirectory, "transformix.log");
     retainFiles = [retainFiles, elastixLogPath, transformixLogPath];
-
+    
     % Get all files in the output directory
     allFiles = dir(caseOutputDirectory);
     allFilePaths = fullfile({allFiles.folder}, {allFiles.name});
-
+    
     % Files to delete: those not in retainFiles
     filesToDelete = setdiff(allFilePaths, retainFiles);
-
+    
     % Delete unwanted files
     for fileIdx = 1:length(filesToDelete)
-        delete(filesToDelete{fileIdx});
+        if filesToDelete{fileIdx} ~= char(caseOutputDirectory)+"\."
+            delete(filesToDelete{fileIdx}); 
+        end
     end
 
     disp("---------------------------------------------------------------")

@@ -1,14 +1,25 @@
+
 metaData
+% Paths
+elastixBasePath = "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\";
+basePath = "C:\Users\gimes\Desktop\MIRA EVAL\";
+dataPath = "C:\Users\gimes\Desktop\MIRA EVAL\data";
+
+rawImgFiles = dir(fullfile(dataPath, "**", "*BHCT.img")); % only raw
+rawImgFiles = {rawImgFiles.name};
+rawImgFiles = strcat(strtok(rawImgFiles, '_'), '\', rawImgFiles);
+
+pointFiles = dir(fullfile(dataPath, "**", "*xyz_r1.txt")); % only points txt
+pointFiles= {pointFiles.name};  % Get all filenames in a cell array
+pointFiles = strcat(strtok(pointFiles, '_'), '\', pointFiles);
+
+cases = unique(strtok(pointFiles, "\"));
 
 % Path to parameter file
-parameter = "Par0008"
-
-parameterFileAffine = ...
-    "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\" + ...
-    "elastix_model_zoo\models\Par0008\Parameters.Par0008.affine.txt"
+parameter = "Par0016"
 parameterFileBSpline = ...
-    "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\" + ...
-    "elastix_model_zoo\models\Par0008\Parameters.Par0008.elastic.txt"
+    "C:\Users\gimes\OneDrive\MAIA\3_UdG\classes\MIRA\lab\lab2\"+...
+    "elastix_model_zoo\models\Par0016\Par0016.multibsplines.lung.sliding.txt";
 
 REGISTER = 1;
 PREPROCESS = 1;
@@ -25,13 +36,15 @@ for caseID = 1:length(cases)
     caseName = string(cases{caseID});
     disp("Processing Case [" + caseName + "]");
     idxs = cellfun(@(x) contains(x, caseName), rawImgFiles);
-    idxs = find(idxs == 1);
+    idxs = idxs == 1;
     caseImgs = rawImgFiles(idxs);
-    casePoints = pointFiles(idxs);
+    pIdxs = cellfun(@(x) contains(x, caseName), pointFiles);
+    pIdxs = pIdxs == 1;
+    casePoints = pointFiles(pIdxs);
     index = find(strcmp(data.Label, caseName));
-    imageDims = data.ImageDims{index};
-    imageSpacing = data.Spacing{index};
-    
+    imageDims = data.ImageDims{index}
+    imageSpacing = data.Spacing{index}
+
 % ---------------------------------------------------------------------
 % READING IN RAW IMAGES
 % ---------------------------------------------------------------------
@@ -52,10 +65,6 @@ for caseID = 1:length(cases)
     inhalePointsPath = fullfile(dataPath, casePoints{inhalePointsId == 1});
     inhalePoints = readmatrix(inhalePointsPath);
 
-    % Moving Points
-    exhalePointsId = cellfun(@(x) contains(x, "eBH"), casePoints);
-    exhalePointsPath = fullfile(dataPath, casePoints{exhalePointsId == 1});
-    exhalePoints = readmatrix(exhalePointsPath);
 
     readTime = toc;
     disp("Reading in completed in " + readTime + " seconds.");
@@ -79,15 +88,15 @@ for caseID = 1:length(cases)
 % LUNG SEGMENTATION
 % ---------------------------------------------------------------------
         inhaleLungMaskNifti = inhaleImgPreprocNifti;
-        inhaleLungMaskNifti.img = segmentLungs2(inhaleLungMaskNifti.img);
+        inhaleLungMaskNifti.img = segmentLungs3(inhaleLungMaskNifti.img);
         exhaleLungMaskNifti = exhaleImgPreprocNifti;
-        exhaleLungMaskNifti.img = segmentLungs2(exhaleLungMaskNifti.img);
+        exhaleLungMaskNifti.img = segmentLungs3(exhaleLungMaskNifti.img);
     
 % ---------------------------------------------------------------------
 % KEYPOINT MASK GENERATION
 % ---------------------------------------------------------------------
         inhalePointsMaskNifti = create_keypoints_mask_nifti(inhalePoints, inhaleImgNifti);
-        exhalePointsMaskNifti = create_keypoints_mask_nifti(exhalePoints, exhaleImgNifti);
+        % exhalePointsMaskNifti = create_keypoints_mask_nifti(exhalePoints, exhaleImgNifti);
     end
 
 % ---------------------------------------------------------------------
@@ -111,8 +120,8 @@ for caseID = 1:length(cases)
         exhaleImgFileName + ".nii"));
     exhaleImgPreprocNiftiPath = char(fullfile(outputDirectory, ...
         exhaleImgFileName + "_preproc.nii"));
-    exhalePointsMaskNiftiPath = char(fullfile(outputDirectory, ...
-        exhaleImgFileName + '_keypoint_mask.nii'));
+    % exhalePointsMaskNiftiPath = char(fullfile(outputDirectory, ...
+    %     exhaleImgFileName + '_keypoint_mask.nii'));
     exhaleLungMaskNiftiPath = char(fullfile(outputDirectory, ...
         exhaleImgFileName + '_mask.nii'));
 
@@ -124,7 +133,7 @@ for caseID = 1:length(cases)
             
         save_nii(exhaleImgNifti, exhaleImgNiftiPath);
         save_nii(exhaleImgPreprocNifti, exhaleImgPreprocNiftiPath);
-        save_nii(exhalePointsMaskNifti, exhalePointsMaskNiftiPath);
+        % save_nii(exhalePointsMaskNifti, exhalePointsMaskNiftiPath);
         save_nii(exhaleLungMaskNifti, exhaleLungMaskNiftiPath);
     end
 
@@ -143,11 +152,11 @@ for caseID = 1:length(cases)
         % Measure time for registration
         disp("Starting registration with elastix ([exhale] -> [inhale]): " + caseName);
         tic;  % Start timing
-        elastixCommand = sprintf('"%s" -m "%s" -mMask "%s" -f "%s" -fMask "%s" -p "%s" -p "%s" -out "%s"', ...
+        elastixCommand = sprintf('"%s" -m "%s" -mMask "%s" -f "%s" -fMask "%s" -p "%s" -out "%s"', ...
                           elastixPath, ...
                           exhaleImgNiftiPath, exhaleLungMaskNiftiPath, ...
                           inhaleImgNiftiPath, inhaleLungMaskNiftiPath, ...
-                          parameterFileAffine, parameterFileBSpline, ...
+                          parameterFileBSpline, ...
                           caseOutputDirectory);
 
         [status, result] = system(elastixCommand);
@@ -161,12 +170,12 @@ for caseID = 1:length(cases)
         % Rename the result image
         resultImagePath = fullfile(caseOutputDirectory, "result." + parameter + ".nii");
         if REGISTER
-            movefile(fullfile(caseOutputDirectory, "result.1.nii"), resultImagePath);
+            movefile(fullfile(caseOutputDirectory, "result.0.nii"), resultImagePath);
         end
 
         % Rename the TransformParameters.0.txt file
         originalTransformParametersPath = fullfile( ...
-            caseOutputDirectory, "TransformParameters.1.txt");
+            caseOutputDirectory, "TransformParameters.0.txt");
         newTransformParametersPath = fullfile( ...
             caseOutputDirectory, "TransformParameters." + parameter + ".txt");
         if REGISTER
@@ -185,45 +194,15 @@ for caseID = 1:length(cases)
 % -----------------------------------------------------------------
         
         inPtsPath2 = fullfile(caseOutputDirectory, "inhalePts.txt");
-        exPtsPath2 = fullfile(caseOutputDirectory, "exhalePts.txt");
+        %exPtsPath2 = fullfile(caseOutputDirectory, "exhalePts.txt");
         formatPointsFile(inhalePointsPath, inPtsPath2);
-        formatPointsFile(exhalePointsPath, exPtsPath2);
+        %formatPointsFile(exhalePointsPath, exPtsPath2);
 
         disp("Starting transformation with transformix: " + caseName);
         transformixCommand = sprintf('"%s" -def "%s" -tp "%s" -out "%s"', ...
                       transformixPath, inPtsPath2, ...
                       newTransformParametersPath, caseOutputDirectory);
         [statusKeypoint, resultKeypoint] = system(transformixCommand);
-
-% -----------------------------------------------------------------
-% LUNG MASK TRANSFORM
-% -----------------------------------------------------------------
-        % Prepare the inhale lung mask transformation
-        inhaleLungMaskTransformParamPath = fullfile(caseOutputDirectory, "TransformParameters_mask." + parameter + ".txt");
-        copyfile(newTransformParametersPath, inhaleLungMaskTransformParamPath);
-        
-        % Update the interpolator to NN for mask transformation
-        updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'ResampleInterpolator', 'FinalNearestNeighborInterpolator');
-        updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'FinalBSplineInterpolationOrder', '0');
-        updateTransformixParameterFile(inhaleLungMaskTransformParamPath, 'WriteResultImage', 'true');
-
-        
-        % Transform the inhale lung mask
-        disp("Starting transformation of inhale lung mask with transformix: " + caseName);
-        transformixLungMaskCommand = sprintf('"%s" -in "%s" -tp "%s" -out "%s"', ...
-                          transformixPath, inhaleLungMaskNiftiPath, ...
-                          inhaleLungMaskTransformParamPath, caseOutputDirectory);
-        [statusLungMask, resultLungMask] = system(transformixLungMaskCommand);
-        
-        if statusLungMask == 0
-            transformedLungMaskPath = char(...
-                fullfile(caseOutputDirectory, "transformed_inhale_lung_mask." + parameter + ".nii"));
-            movefile(fullfile(caseOutputDirectory, "result.nii"), transformedLungMaskPath);
-            disp("Inhale lung mask transformation completed: " + transformedLungMaskPath);
-        else
-            disp("Error during inhale lung mask transformation, check transformix log!");
-        end
-
 
         transformationTime = toc;
         disp("Transformation with transformix completed in " ...
@@ -235,17 +214,8 @@ for caseID = 1:length(cases)
 % -----------------------------------------------------------------
         % Masked registered image
         registeredImgNifti = load_nii(char(resultImagePath));
-        transformedMaskNifti = load_nii(char(transformedLungMaskPath));
-        registeredImgMaskedImg = registeredImgNifti.img .* transformedMaskNifti.img;
         
-        % Masked ground truth image
-        inhaleImgMaskedImg = inhaleImgNifti.img .* inhaleLungMaskNifti.img;
-
         % Compute Metrics
-        % diceCoefficient = computeDSC(binarizedMovingMask, binarizedFixedMask);
-        % ncc = computeNCC(inhaleImgMaskedImg, registeredImgMaskedImg);
-        % ngc = computeNGC(inhaleImgMaskedImg, registeredImgMaskedImg);
-
         ncc = computeNCC( ...
             inhaleImgNifti.img .* inhaleLungMaskNifti.img, ...
             registeredImgNifti.img .* inhaleLungMaskNifti.img);
@@ -260,26 +230,19 @@ for caseID = 1:length(cases)
             movefile(fullfile(caseOutputDirectory, "outputpoints.txt"), transformedResultPath);
 
 
-            fixedCoordinates = exhalePoints;
+
+            % Save the distances into a text file
             transformedCoordinates = extractOutputPoints(transformedResultPath);
 
             % Ensure the point sets have the same number of points
-            if size(fixedCoordinates) ~= size(transformedCoordinates)
+            if size(transformedCoordinates) ~= 300
                 error('The number of points in the two files do not match.');
             end
 
-            % Calculate the Euclidean distances
-            distances = fixedCoordinates - transformedCoordinates;
-            distancesVoxel = sqrt(sum(distances.^2, 2));
-            distancesMilimeter = sqrt(sum((distances.*imageSpacing).^2, 2));
-
-            % Save the distances into a text file
             distanceFilePath = char( ...
-                fullfile(caseOutputDirectory, 'euclidean_distances.txt'));
-            writematrix(distancesVoxel, distanceFilePath);
+                fullfile(caseOutputDirectory, 'transformedPoints.txt'));
+            writematrix(transformedCoordinates, distanceFilePath)
 
-            disp("Average distance: " + mean(distancesVoxel) + " voxels;")
-            disp("Average distance: " + mean(distancesMilimeter) + " mm;")
             disp("NCC: " + ncc)
             disp("NGC: " + ngc)
         else
@@ -297,8 +260,6 @@ for caseID = 1:length(cases)
     timingData.(caseName).registrationTime = registrationTime;
     timingData.(caseName).transformationTime = transformationTime;
     timingData.(caseName).total = readTime + saveTime + registrationTime + transformationTime;
-    TREdata.(caseName).voxel = mean(distancesVoxel);
-    TREdata.(caseName).mm = mean(distancesMilimeter);
     TREdata.(caseName).NCC = ncc;
     TREdata.(caseName).NGC = ngc;
 
@@ -310,10 +271,9 @@ for caseID = 1:length(cases)
         resultImagePath, ...
         newTransformParametersPath, ...
         transformedResultPath, ...
-        transformedLungMaskPath, ...
         distanceFilePath, ...
         inPtsPath2, ...
-        exPtsPath2, ...
+        % exPtsPath2, ...
     };
 
     % Add logs to retain list
@@ -374,4 +334,3 @@ disp("Timing data for all cases:");
 disp(timingTable);
 disp("TRE data for all cases:");
 disp(TRETable);
-

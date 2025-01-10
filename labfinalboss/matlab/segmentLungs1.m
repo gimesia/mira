@@ -28,7 +28,7 @@ function binarized_img_3d = segmentLungs1(img_3d, threshold_val)
         idx = find([props.Area] > 1500); % Adjust the threshold as needed
         filtered_img = ismember(labeled_img, idx);
 
-        % Remove non-central objects (replace with your specific implementation)
+        % Remove non-central objects
         % ...
 
         % Fill remaining holes

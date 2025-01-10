@@ -258,8 +258,12 @@ for caseID = 1:length(cases)
         % ncc = computeNCC(inhaleImgMaskedImg, registeredImgMaskedImg);
         % ngc = computeNGC(inhaleImgMaskedImg, registeredImgMaskedImg);
 
-        ncc = computeNCC(inhaleImgNifti.img, registeredImgNifti.img);
-        ngc = computeNGC(inhaleImgNifti.img, registeredImgNifti.img);
+        ncc = computeNCC( ...
+            inhaleImgNifti.img .* inhaleLungMaskNifti.img, ...
+            registeredImgNifti.img .* inhaleLungMaskNifti.img);
+        ngc = computeNGC( ...
+            inhaleImgNifti.img .* inhaleLungMaskNifti.img, ...
+            registeredImgNifti.img .* inhaleLungMaskNifti.img);
 
         if statusKeypoint == 0
             % Rename the transformation result
@@ -288,6 +292,8 @@ for caseID = 1:length(cases)
 
             disp("Average distance: " + mean(distancesVoxel) + " voxels;")
             disp("Average distance: " + mean(distancesMilimeter) + " mm;")
+            disp("NCC: " + ncc)
+            disp("NGC: " + ngc)
         else
             disp("There has been an error, see transformix log!");
         end
